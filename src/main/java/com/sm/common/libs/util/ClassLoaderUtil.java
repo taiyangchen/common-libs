@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.sm.common.libs.exception.ClassInstantiationException;
+import com.sm.common.libs.exception.ServiceNotFoundException;
 
 /**
  * <p>
@@ -576,5 +577,289 @@ public abstract class ClassLoaderUtil {
     } catch (Exception e) {
       throw new ClassInstantiationException(clazz, "Failed to instantiate class: " + clazz.getName(), e);
     }
+  }
+
+  /**
+   * 按照标准的jar service规范搜索并装载指定名称的service类。
+   * 
+   * <p>
+   * 搜索方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param serviceId 服务名
+   * 
+   * @return service class
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   */
+  public static <T> Class<T> loadServiceClass(String serviceId) throws ClassNotFoundException {
+    return loadServiceClass(serviceId, getContextClassLoader());
+  }
+
+  /**
+   * 按照标准的jar service规范搜索并装载指定名称的service类。
+   * 
+   * <p>
+   * 搜索方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param serviceId 服务名
+   * @param referrer 调用者类，如果为<code>null</code>，表示在<code>ClassLoaderUtil</code> 的class loader中找。
+   * 
+   * @return service class
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   */
+  public static <T> Class<T> loadServiceClass(String serviceId, Class<?> referrer) throws ClassNotFoundException {
+    ClassLoader classLoader = getReferrerClassLoader(referrer);
+
+    // 如果classLoader为null，表示从ClassLoaderUtil所在的classloader中查找，
+    return loadServiceClass(serviceId, classLoader);
+  }
+
+  /**
+   * 按照标准的jar service规范搜索并装载指定名称的service类。
+   * 
+   * <p>
+   * 搜索方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param serviceId 服务名
+   * @param classLoader 在指定classLoader中查找，如果为<code>null</code>，表示在
+   *        <code>ClassLoaderUtil</code>的class loader中找。
+   * 
+   * @return service class
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   */
+  public static <T> Class<T> loadServiceClass(String serviceId, ClassLoader classLoader) throws ClassNotFoundException {
+    if (StringUtils.isBlank(serviceId)) {
+      return null;
+    }
+
+    serviceId = "META-INF/services/" + serviceId;
+
+    InputStream istream = getResourceAsStream(serviceId, classLoader);
+
+    if (istream == null) {
+      throw new ServiceNotFoundException("Could not find " + serviceId);
+    }
+
+    // 读文件/META-INF/services/serviceId。
+    String serviceClassName;
+
+    try {
+      serviceClassName = StringUtils.trimToEmpty(IOUtil.readText(istream, "UTF-8", true));
+    } catch (IOException e) {
+      throw new ServiceNotFoundException("Failed to load " + serviceId, e);
+    }
+
+    return ClassLoaderUtil.loadClass(serviceClassName, classLoader);
+  }
+
+  /**
+   * 首先试图装入指定名称的类，如果找不到，再按照标准的jar service规范搜索并装载指定名称的service类。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param className 要装入的类名
+   * @param serviceId 服务名
+   * 
+   * @return service class
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   */
+  public static <T> Class<T> loadServiceClass(String className, String serviceId) throws ClassNotFoundException {
+    return loadServiceClass(className, serviceId, getContextClassLoader());
+  }
+
+  /**
+   * 首先试图装入指定名称的类，如果找不到，再按照标准的jar service规范搜索并装载指定名称的service类。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param className 要装入的类名
+   * @param serviceId 服务名
+   * @param referrer 调用者类，如果为<code>null</code>，表示在<code>ClassLoaderUtil</code> 的class loader中找。
+   * 
+   * @return service class
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   */
+  public static <T> Class<T> loadServiceClass(String className, String serviceId, Class<T> referrer)
+      throws ClassNotFoundException {
+    ClassLoader classLoader = getReferrerClassLoader(referrer);
+
+    // 如果classLoader为null，表示从ClassLoaderUtil所在的classloader中查找，
+    return loadServiceClass(className, serviceId, classLoader);
+  }
+
+  /**
+   * 首先试图装入指定名称的类，如果找不到，再按照标准的jar service规范搜索并装载指定名称的service类。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param className 要装入的类名
+   * @param serviceId 服务名
+   * @param classLoader 在指定classLoader中查找，如果为<code>null</code>，表示在
+   *        <code>ClassLoaderUtil</code>的class loader中找。
+   * 
+   * @return service class
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   */
+  public static <T> Class<T> loadServiceClass(String className, String serviceId, ClassLoader classLoader)
+      throws ClassNotFoundException {
+    try {
+      // 先尝试装入class。
+      if (StringUtils.isNotBlank(className)) {
+        return loadClass(className, classLoader);
+      }
+    } catch (ClassNotFoundException ignore) {
+      logger.error("loadServiceClass error", ignore);
+    }
+
+    // 找不到，尝试查找service。
+    return loadServiceClass(serviceId, classLoader);
+  }
+
+  /**
+   * 按照标准的jar service规范搜索并装载指定名称的service类并实例化之。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param serviceId 服务名
+   * 
+   * @return 实例类
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   * @throws ClassInstantiationException 如果实例化失败
+   */
+  public static <T> T newServiceInstance(String serviceId) throws ClassNotFoundException, ClassInstantiationException {
+    Class<T> clazz = loadServiceClass(serviceId);
+
+    return newInstance(clazz);
+  }
+
+  /**
+   * 按照标准的jar service规范搜索并装载指定名称的service类并实例化之。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param serviceId 服务名
+   * @param referrer 调用者类，如果为<code>null</code>，表示在<code>ClassLoaderUtil</code> 的class loader中找。
+   * 
+   * @return 实例类
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   * @throws ClassInstantiationException 如果实例化失败
+   */
+  public static <T> T newServiceInstance(String serviceId, Class<T> referrer)
+      throws ClassNotFoundException, ClassInstantiationException {
+    Class<T> clazz = loadServiceClass(serviceId, referrer);
+
+    return newInstance(clazz);
+  }
+
+  /**
+   * 按照标准的jar service规范搜索并装载指定名称的service类并实例化之。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param serviceId 服务名
+   * @param classLoader 在指定classLoader中查找，如果为<code>null</code>，表示在
+   *        <code>ClassLoaderUtil</code>的class loader中找。
+   * 
+   * @return 实例类
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   * @throws ClassInstantiationException 如果实例化失败
+   */
+  public static <T> T newServiceInstance(String serviceId, ClassLoader classLoader)
+      throws ClassNotFoundException, ClassInstantiationException {
+    Class<T> clazz = loadServiceClass(serviceId, classLoader);
+
+    return newInstance(clazz);
+  }
+
+  /**
+   * 首先试图装入指定名称的类，如果找不到，再按照标准的jar service规范搜索并装载指定名称的service类。 找到以后实例化之。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param className 要装入的类名
+   * @param serviceId 服务名
+   * 
+   * @return 实例类
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   * @throws ClassInstantiationException 如果实例化失败
+   */
+  public static <T> T newServiceInstance(String className, String serviceId)
+      throws ClassNotFoundException, ClassInstantiationException {
+    Class<T> clazz = loadServiceClass(className, serviceId);
+
+    return newInstance(clazz);
+  }
+
+  /**
+   * 首先试图装入指定名称的类，如果找不到，再按照标准的jar service规范搜索并装载指定名称的service类。 找到以后实例化之。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param className 要装入的类名
+   * @param serviceId 服务名
+   * @param referrer 调用者类，如果为<code>null</code>，表示在<code>ClassLoaderUtil</code> 的class loader中找。
+   * 
+   * @return 实例类
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   * @throws ClassInstantiationException 如果实例化失败
+   */
+  public static <T> T newServiceInstance(String className, String serviceId, Class<T> referrer)
+      throws ClassNotFoundException, ClassInstantiationException {
+    Class<T> clazz = loadServiceClass(className, serviceId, referrer);
+
+    return newInstance(clazz);
+  }
+
+  /**
+   * 首先试图装入指定名称的类，如果找不到，再按照标准的jar service规范搜索并装载指定名称的service类。 找到以后实例化之。
+   * 
+   * <p>
+   * 搜索service的方法是在class loader中查找<code>META-INF/services/serviceId</code> 文件，并将其内容作为service类名。
+   * </p>
+   * 
+   * @param className 要装入的类名
+   * @param serviceId 服务名
+   * @param classLoader 在指定classLoader中查找，如果为<code>null</code>，表示在
+   *        <code>ClassLoaderUtil</code>的class loader中找。
+   * 
+   * @return 实例类
+   * 
+   * @throws ClassNotFoundException 如果service class找不到，或装载service文件失败
+   * @throws ClassInstantiationException 如果实例化失败
+   */
+  public static <T> T newServiceInstance(String className, String serviceId, ClassLoader classLoader)
+      throws ClassNotFoundException, ClassInstantiationException {
+    Class<T> clazz = loadServiceClass(className, serviceId, classLoader);
+
+    return newInstance(clazz);
   }
 }
