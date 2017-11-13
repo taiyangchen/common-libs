@@ -7,6 +7,8 @@ import java.util.Map;
 
 import org.apache.commons.lang3.ArrayUtils;
 
+import com.sm.common.libs.collection.ListMap;
+
 /**
  * 泛型转换的工具类
  * 
@@ -130,6 +132,16 @@ public abstract class CastUtil {
 
     @SuppressWarnings("unchecked")
     Map<K, V> result = (Map<K, V>) map;
+    return result;
+  }
+
+  public static <K, V> ListMap<K, V> castListMap(ListMap<?, ?> map) {
+    if (CollectionUtil.isEmpty(map)) {
+      return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    ListMap<K, V> result = (ListMap<K, V>) map;
     return result;
   }
 
