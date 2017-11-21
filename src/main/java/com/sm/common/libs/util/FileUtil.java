@@ -6,6 +6,7 @@ package com.sm.common.libs.util;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Path;
 
 /**
  * 有关<code>File</code>处理的工具类。
@@ -65,6 +66,32 @@ public abstract class FileUtil {
     }
     return false;
   }
+
+  public static boolean createPath(Path path) throws IOException {
+    return createPath(path, false);
+  }
+
+  public static boolean createPath(Path path, boolean override) throws IOException {
+    if (path == null) {
+      return false;
+    }
+
+    File file = path.toFile();
+    if (file.exists() && !override) {
+      return false;
+    }
+
+    if (file.isDirectory()) {
+      return file.mkdirs();
+    }
+
+    if (file.getParentFile() != null) {
+      file.getParentFile().mkdirs();
+    }
+
+    return file.createNewFile();
+  }
+
 
   /**
    * 创建文件，不管文件层级，均可创建
